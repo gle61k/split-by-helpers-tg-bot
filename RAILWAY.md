@@ -14,36 +14,23 @@
 4. **Не** ставьте галочки «Add README / .gitignore» (у нас уже есть файлы).
 5. Нажмите **Create repository**.
 
-### 1.2. Залейте код с компьютера
+### 1.2. Залейте код на GitHub (если ещё не залили)
 
-Откройте **cmd** или **PowerShell** в папке проекта (где лежат `tg_bot.py`, `README.md`).
+Код уже может быть в репозитории, например: **https://github.com/gle61k/split-by-helpers-tg-bot** — тогда переходите к **части 2**.
 
-Проверьте, что **нет** файла `.env` в коммите (он в `.gitignore` — так и должно быть).
-
-Команды (подставьте **ваш** URL репозитория с GitHub):
+Если клонируете на другой ПК или создаёте репо заново:
 
 ```bash
 git init
 git add .
-git status
-```
-
-Убедитесь, что в списке **нет** `.env`. Если он есть — не коммитьте:
-
-```bash
-git reset HEAD .env
-```
-
-Дальше:
-
-```bash
-git commit -m "Telegram bot: split_by_helpers + Railway"
+git status   # не должно быть .env
+git commit -m "Telegram bot"
 git branch -M main
 git remote add origin https://github.com/ВАШ_ЛОГИН/ИМЯ_РЕПО.git
 git push -u origin main
 ```
 
-GitHub попросит логин/пароль или **Personal Access Token** (для HTTPS токен вместо пароля).
+Для HTTPS GitHub обычно нужен **Personal Access Token** вместо пароля.
 
 ---
 

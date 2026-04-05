@@ -2,6 +2,8 @@
 
 Бот принимает файл выгрузки Excel (`.xls` / `.xlsx`), обрабатывает его скриптом `split_by_helpers.py` и присылает готовые `.xlsx` в чат.
 
+Репозиторий: [github.com/gle61k/split-by-helpers-tg-bot](https://github.com/gle61k/split-by-helpers-tg-bot)
+
 ## Локально (Windows)
 
 1. Скопируйте `.env.example` в `.env`, вставьте токен от [@BotFather](https://t.me/BotFather).
