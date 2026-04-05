@@ -127,9 +127,9 @@ GitHub попросит логин/пароль или **Personal Access Token**
 
 ---
 
-## Опционально: версия Python
+## Версия Python
 
-В проекте есть `nixpacks.toml` с `NIXPACKS_PYTHON_VERSION = "3.11"`. При необходимости в Railway → Variables можно переопределить, но обычно хватает файла в репозитории.
+В корне репозитория файл `runtime.txt` (сейчас `python-3.11.9`). При ошибке сборки в Railway → **Variables** можно добавить `NIXPACKS_PYTHON_VERSION` = `3.11`.
 
 ---
 
