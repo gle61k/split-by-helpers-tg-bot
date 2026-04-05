@@ -1,0 +1,3 @@
+# Railway (Nixpacks): явная версия Python
+[variables]
+NIXPACKS_PYTHON_VERSION = "3.11"
