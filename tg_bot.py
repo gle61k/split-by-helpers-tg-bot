@@ -21,20 +21,12 @@ import sys
 import tempfile
 import urllib.error
 import urllib.request
-from contextlib import asynccontextmanager
 from pathlib import Path
 
 try:
     from dotenv import load_dotenv
 except ImportError:
     load_dotenv = None
-
-import uvicorn
-from starlette.applications import Starlette
-from starlette.background import BackgroundTask
-from starlette.requests import Request
-from starlette.responses import PlainTextResponse, Response
-from starlette.routing import Route
 
 from telegram import BotCommand, Update
 from telegram.error import Conflict
@@ -316,86 +308,37 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             await msg.reply_text(f"❌ Ошибка: {e}")
 
 
-async def health(_: Request) -> PlainTextResponse:
-    return PlainTextResponse("ok", status_code=200)
-
-
-async def _webhook_process_update(application: Application, data: dict) -> None:
-    """
-    Обработка апдейта после ответа 200 Telegram.
-    Раньше использовался asyncio.create_task — на ASGI задача могла отменяться вместе с запросом,
-    из-за чего бот «молчал» после приёма файла.
-    """
-    try:
-        update = Update.de_json(data, application.bot)
-        uid = update.update_id
-        logger.info("Webhook: обработка update_id=%s", uid)
-        await application.process_update(update)
-        logger.info("Webhook: update_id=%s обработан", uid)
-    except Exception:
-        logger.exception("Webhook: ошибка process_update")
-
-
-async def telegram_webhook(request: Request) -> Response:
-    application: Application = request.app.state.ptb_app
-    secret = request.app.state.webhook_secret
-    if secret and request.headers.get("X-Telegram-Bot-Api-Secret-Token") != secret:
-        return Response(status_code=403)
-
-    try:
-        data = await request.json()
-    except Exception:
-        return Response(status_code=400)
-
-    return Response(
-        status_code=200,
-        background=BackgroundTask(_webhook_process_update, application, data),
-    )
-
-
-def create_starlette_app(token: str) -> Starlette:
-    webhook_secret = _webhook_secret(token)
-    public = _public_base_url()
-    if not public:
-        raise RuntimeError("Для вебхука задайте PUBLIC_URL (полный https://...) или RAILWAY_PUBLIC_DOMAIN")
-
-    webhook_url = f"{public}{WEBHOOK_PATH}"
-
-    @asynccontextmanager
-    async def lifespan(app: Starlette):
-        application = build_application(token)
-        app.state.ptb_app = application
-        app.state.webhook_secret = webhook_secret
-
-        await application.initialize()
-        await application.start()
-        await application.bot.set_webhook(
-            url=webhook_url,
-            secret_token=webhook_secret,
-            drop_pending_updates=True,
-        )
-        logger.info("Вебхук установлен: %s", webhook_url)
-
-        yield
-
-        await application.bot.delete_webhook(drop_pending_updates=True)
-        await application.stop()
-        await application.shutdown()
-
-    return Starlette(
-        lifespan=lifespan,
-        routes=[
-            Route("/", health, methods=["GET", "HEAD"]),
-            Route(WEBHOOK_PATH, telegram_webhook, methods=["POST"]),
-        ],
-    )
-
-
 def run_webhook_server() -> None:
+    """
+    Railway / облако: встроенный HTTP-сервер PTB (aiohttp), без Starlette/uvicorn.
+    Так корректно обрабатываются вебхук и secret_token; раньше свой ASGI-обработчик
+    мог не получать или отбрасывать запросы Telegram.
+    """
     token = os.environ["TELEGRAM_BOT_TOKEN"].strip()
     port = int(os.environ.get("PORT", "8080"))
-    starlette_app = create_starlette_app(token)
-    uvicorn.run(starlette_app, host="0.0.0.0", port=port, log_level="info")
+    public = _public_base_url()
+    if not public:
+        raise SystemExit(
+            "Railway: нет публичного URL. Включите Public Networking или задайте PUBLIC_URL (https://...)."
+        )
+    webhook_url = f"{public.rstrip('/')}{WEBHOOK_PATH}"
+    url_path = WEBHOOK_PATH.strip("/") or "webhook"
+    secret = _webhook_secret(token)
+
+    application = build_application(token)
+    logger.info("Вебхук PTB: url=%s path=/%s port=%s", webhook_url, url_path, port)
+
+    application.run_webhook(
+        listen="0.0.0.0",
+        port=port,
+        url_path=url_path,
+        webhook_url=webhook_url,
+        secret_token=secret,
+        allowed_updates=None,
+        drop_pending_updates=True,
+        bootstrap_retries=5,
+        close_loop=True,
+    )
 
 
 def run_polling() -> None:
