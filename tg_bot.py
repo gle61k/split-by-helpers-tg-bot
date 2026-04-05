@@ -31,6 +31,7 @@ except ImportError:
 
 import uvicorn
 from starlette.applications import Starlette
+from starlette.background import BackgroundTask
 from starlette.requests import Request
 from starlette.responses import PlainTextResponse, Response
 from starlette.routing import Route
@@ -251,6 +252,13 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return
 
     doc = msg.document
+    logger.info(
+        "Документ: name=%s size=%s mime=%s chat=%s",
+        doc.file_name,
+        getattr(doc, "file_size", None),
+        doc.mime_type,
+        msg.chat_id,
+    )
     ok, suffix = _document_suffix(doc)
     if not ok:
         await msg.reply_text(
@@ -312,6 +320,22 @@ async def health(_: Request) -> PlainTextResponse:
     return PlainTextResponse("ok", status_code=200)
 
 
+async def _webhook_process_update(application: Application, data: dict) -> None:
+    """
+    Обработка апдейта после ответа 200 Telegram.
+    Раньше использовался asyncio.create_task — на ASGI задача могла отменяться вместе с запросом,
+    из-за чего бот «молчал» после приёма файла.
+    """
+    try:
+        update = Update.de_json(data, application.bot)
+        uid = update.update_id
+        logger.info("Webhook: обработка update_id=%s", uid)
+        await application.process_update(update)
+        logger.info("Webhook: update_id=%s обработан", uid)
+    except Exception:
+        logger.exception("Webhook: ошибка process_update")
+
+
 async def telegram_webhook(request: Request) -> Response:
     application: Application = request.app.state.ptb_app
     secret = request.app.state.webhook_secret
@@ -323,15 +347,10 @@ async def telegram_webhook(request: Request) -> Response:
     except Exception:
         return Response(status_code=400)
 
-    async def _run() -> None:
-        try:
-            update = Update.de_json(data, application.bot)
-            await application.process_update(update)
-        except Exception:
-            logger.exception("process_update failed")
-
-    asyncio.create_task(_run())
-    return Response(status_code=200)
+    return Response(
+        status_code=200,
+        background=BackgroundTask(_webhook_process_update, application, data),
+    )
 
 
 def create_starlette_app(token: str) -> Starlette:
